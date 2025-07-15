@@ -1,0 +1,2 @@
+# OUGreenCampus
+ỨNG DỤNG AI TRONG PHÂN LOẠI RÁC THẢI HƯỚNG ĐẾN HÀNH TRÌNH ĐẠI HỌC XANH
