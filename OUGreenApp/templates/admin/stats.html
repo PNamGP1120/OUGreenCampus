@@ -1,0 +1,219 @@
+{% extends 'admin/base_site.html' %}
+
+{% block content %}
+<h1>📊 Dashboard thống kê hệ thống OU Green Campus</h1>
+
+<style>
+    .dashboard-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 25px;
+        margin-top: 25px;
+    }
+    .chart-card {
+        background: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    .chart-table {
+        flex: 1;
+        max-width: 45%;
+    }
+    .chart-canvas {
+        flex: 1;
+    }
+    h3 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    table th, table td {
+        border: 1px solid #ddd;
+        padding: 4px 6px;
+        text-align: center;
+    }
+    table th {
+        background: #f2f2f2;
+    }
+</style>
+
+<div class="dashboard-grid">
+    <!-- Users -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>👥 Người dùng theo vai trò</h3>
+            <table>
+                <thead><tr><th>Role</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for u in stats_data.users.by_role %}
+                    <tr><td>{{ u.role }}</td><td>{{ u.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="userByRoleChart"></canvas></div>
+    </div>
+
+    <!-- News -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>📰 News theo tháng</h3>
+            <table>
+                <thead><tr><th>Tháng</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for n in stats_data.news.by_month %}
+                    <tr><td>{{ n.month }}</td><td>{{ n.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="newsByMonthChart"></canvas></div>
+    </div>
+
+    <!-- Documents -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>📂 Documents theo tháng</h3>
+            <table>
+                <thead><tr><th>Tháng</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for d in stats_data.documents.by_month %}
+                    <tr><td>{{ d.month }}</td><td>{{ d.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="docByMonthChart"></canvas></div>
+    </div>
+
+    <!-- Projects -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>🏆 Projects theo trạng thái</h3>
+            <table>
+                <thead><tr><th>Trạng thái</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for p in stats_data.projects.by_status %}
+                    <tr><td>{{ p.status }}</td><td>{{ p.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="projectStatusChart"></canvas></div>
+    </div>
+
+    <!-- Comments -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>💬 Comments theo ngày</h3>
+            <table>
+                <thead><tr><th>Ngày</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for c in stats_data.comments.by_day %}
+                    <tr><td>{{ c.day }}</td><td>{{ c.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="commentByDayChart"></canvas></div>
+    </div>
+
+    <!-- Likes -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>👍 Likes theo ngày</h3>
+            <table>
+                <thead><tr><th>Ngày</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for l in stats_data.likes.by_day %}
+                    <tr><td>{{ l.day }}</td><td>{{ l.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="likeByDayChart"></canvas></div>
+    </div>
+
+    <!-- AI Usage -->
+    <div class="chart-card">
+        <div class="chart-table">
+            <h3>🤖 AI Usage theo loại</h3>
+            <table>
+                <thead><tr><th>Loại</th><th>Số lượng</th></tr></thead>
+                <tbody>
+                    {% for a in stats_data.ai_usage.by_type %}
+                    <tr><td>{{ a.type }}</td><td>{{ a.total }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="chart-canvas"><canvas id="aiByTypeChart"></canvas></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const stats = {{ stats|safe }};
+    const labelsFrom = (arr, field) => arr.map(i => i[field]);
+    const valuesFrom = (arr) => arr.map(i => i.total);
+
+    new Chart(document.getElementById("userByRoleChart"), {
+        type: "pie",
+        data: {
+            labels: labelsFrom(stats.users.by_role, "role"),
+            datasets: [{data: valuesFrom(stats.users.by_role), backgroundColor:["#36A2EB","#FF6384","#FFCE56"]}]
+        }
+    });
+    new Chart(document.getElementById("newsByMonthChart"), {
+        type: "bar",
+        data: {
+            labels: labelsFrom(stats.news.by_month, "month"),
+            datasets: [{label:"News",data:valuesFrom(stats.news.by_month),backgroundColor:"#4BC0C0"}]
+        }
+    });
+    new Chart(document.getElementById("docByMonthChart"), {
+        type: "bar",
+        data: {
+            labels: labelsFrom(stats.documents.by_month, "month"),
+            datasets: [{label:"Documents",data:valuesFrom(stats.documents.by_month),backgroundColor:"#9966FF"}]
+        }
+    });
+    new Chart(document.getElementById("projectStatusChart"), {
+        type: "doughnut",
+        data: {
+            labels: labelsFrom(stats.projects.by_status, "status"),
+            datasets: [{data:valuesFrom(stats.projects.by_status),backgroundColor:["#FF6384","#36A2EB","#FFCE56","#4BC0C0"]}]
+        }
+    });
+    new Chart(document.getElementById("commentByDayChart"), {
+        type: "line",
+        data: {
+            labels: labelsFrom(stats.comments.by_day, "day"),
+            datasets: [{label:"Comments",data:valuesFrom(stats.comments.by_day),borderColor:"#FF6384",fill:false}]
+        }
+    });
+    new Chart(document.getElementById("likeByDayChart"), {
+        type: "line",
+        data: {
+            labels: labelsFrom(stats.likes.by_day, "day"),
+            datasets: [{label:"Likes",data:valuesFrom(stats.likes.by_day),borderColor:"#36A2EB",fill:false}]
+        }
+    });
+    new Chart(document.getElementById("aiByTypeChart"), {
+        type: "bar",
+        data: {
+            labels: labelsFrom(stats.ai_usage.by_type, "type"),
+            datasets: [{label:"AI Usage",data:valuesFrom(stats.ai_usage.by_type),backgroundColor:"#FF9F40"}]
+        }
+    });
+</script>
+{% endblock %}
