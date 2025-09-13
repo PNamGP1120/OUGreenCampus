@@ -26,3 +26,14 @@ class IsOwnerOrAdminOrReadOnly(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         return hasattr(obj, "user") and (obj.user == request.user or request.user.role == 'admin')
+
+
+class IsOwnerOrAdmin(permissions.BasePermission):
+    """
+    Quyền hạn: chỉ owner của session hoặc admin mới được xem chi tiết session.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_authenticated and request.user.role == "admin":
+            return True
+        return obj.user == request.user

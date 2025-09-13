@@ -1,22 +1,26 @@
 from django.db.models import Count
 from django.db.models.functions import TruncMonth, TruncDate
+from rest_framework import filters
 from rest_framework import viewsets, permissions, parsers, status
 from rest_framework.decorators import action, api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from sendgrid import SendGridAPIClient, Mail
+from transformers import pipeline
 
 from OUGreenApp import serializers
 from OUGreenApp.ai_utils import predict_waste
 from OUGreenApp.models import (
     User, Category, News, ProjectContest, Proposal,
-    Document, AIUsageLog, Feedback, Comment, Like, NewsletterSubscriber
+    Document, AIUsageLog, Feedback, Comment, Like, NewsletterSubscriber, Tag, ChatSession, ChatMessage
 )
 from OUGreenApp.perms import IsAdmin, IsEditorOrAdmin, IsOwnerOrAdminOrReadOnly
+from OUGreenApp.rag_utils import search_news
 from OUGreenApp.serializers import (
     UserSerializer, CategorySerializer, NewsSerializer, ProjectContestSerializer,
     ProposalSerializer, DocumentSerializer, AIUsageLogSerializer,
-    FeedbackSerializer, CommentSerializer, LikeSerializer, WasteClassifySerializer, NewsletterSubscriberSerializer
+    FeedbackSerializer, CommentSerializer, LikeSerializer, WasteClassifySerializer, NewsletterSubscriberSerializer,
+    TagSerializer, ChatMessageSerializer, ChatSessionSerializer
 )
 from backend import settings
 
@@ -47,16 +51,41 @@ class CategoryViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         return [IsEditorOrAdmin()]
 
-
-class NewsViewSet(viewsets.ModelViewSet):
-    queryset = News.objects.all()
-    serializer_class = NewsSerializer
-    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+class TagViewSet(viewsets.ModelViewSet):
+    queryset = Tag.objects.all()
+    serializer_class = TagSerializer
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
         return [IsEditorOrAdmin()]
+
+
+class NewsViewSet(viewsets.ModelViewSet):
+    queryset = News.objects.all().order_by("-created_at")
+    serializer_class = NewsSerializer
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    filterset_fields = ["category", "tags"]
+    search_fields = ["title"]
+    ordering_fields = ["created_at", "title"]
+
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if not user.is_authenticated or user.role == "user":
+            qs = qs.filter(status="published")
+        return qs
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
+        return [IsEditorOrAdmin()]
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user, status="draft")
 
 
 class ProjectContestViewSet(viewsets.ModelViewSet):
@@ -86,6 +115,10 @@ class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    filterset_fields = ["category", "tags"]
+    search_fields = ["title"]
+    ordering_fields = ["created_at", "title"]
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
@@ -241,12 +274,36 @@ def dashboard_stats(request):
 
 
 SUGGESTIONS = {
-    "cardboard": "Thùng carton có thể tái chế.",
-    "glass": "Chai, lọ thủy tinh nên rửa sạch và tái chế.",
-    "metal": "Lon kim loại có thể bán ve chai hoặc tái chế.",
-    "paper": "Giấy nên phân loại riêng và tái chế.",
-    "plastic": "Nhựa có thể tái chế, hạn chế vứt bừa bãi.",
-    "trash": "Rác khác, cần xử lý theo hướng dẫn địa phương."
+    "cardboard": (
+        "Thùng carton và các loại bìa cứng có thể tái chế. "
+        "Bạn nên gấp gọn, tránh để ướt, và cho vào thùng rác tái chế. "
+        "Nếu còn sạch sẽ, có thể tận dụng để đóng gói hoặc làm đồ thủ công."
+    ),
+    "glass": (
+        "Chai, lọ thủy tinh có thể tái chế nhiều lần mà không làm giảm chất lượng. "
+        "Hãy rửa sạch trước khi bỏ đi, phân loại riêng để đưa đến điểm thu gom. "
+        "Tránh làm vỡ để đảm bảo an toàn."
+    ),
+    "metal": (
+        "Lon nhôm, sắt và các vật dụng kim loại có thể được tái chế. "
+        "Bạn nên dồn riêng chúng lại và bán cho ve chai hoặc đưa tới cơ sở tái chế. "
+        "Nếu dính thực phẩm, hãy rửa sạch để tránh ô nhiễm và mùi hôi."
+    ),
+    "paper": (
+        "Giấy báo, vở cũ, hộp giấy đều có thể tái chế. "
+        "Hãy phân loại riêng, giữ khô ráo và không lẫn với thực phẩm hoặc chất bẩn. "
+        "Bạn cũng có thể tái sử dụng giấy cho việc ghi chú hoặc gói hàng."
+    ),
+    "plastic": (
+        "Nhựa là loại rác có thể tái chế, nhưng cần hạn chế sử dụng và thải bỏ. "
+        "Hãy rửa sạch chai, lọ, hộp nhựa trước khi phân loại. "
+        "Ưu tiên tái sử dụng nhiều lần và hạn chế nhựa dùng một lần để bảo vệ môi trường."
+    ),
+    "trash": (
+        "Đây là loại rác thải còn lại (hữu cơ lẫn vô cơ khó phân loại). "
+        "Bạn cần xử lý theo hướng dẫn của địa phương, ví dụ: bỏ vào thùng rác sinh hoạt. "
+        "Nên giảm thiểu lượng rác này bằng cách ưu tiên tái chế, tái sử dụng, và phân loại đúng từ đầu."
+    ),
 }
 
 @api_view(["POST"])
@@ -315,3 +372,141 @@ class NewsletterViewSet(viewsets.ModelViewSet):
             return Response({"status": "Emails sent", "total": len(emails)})
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+class ChatSessionViewSet(viewsets.ModelViewSet):
+    queryset = ChatSession.objects.all().order_by("-created_at")
+    serializer_class = ChatSessionSerializer
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticatedOrReadOnly()]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user if self.request.user.is_authenticated else None)
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated and user.role == "admin":
+            return ChatSession.objects.all()
+        return ChatSession.objects.filter(user=user)
+
+    @action(methods=["post"], detail=True, url_path="ask", permission_classes=[permissions.AllowAny])
+    def ask(self, request, pk=None):
+        """
+        Nhận câu hỏi từ user, lưu vào ChatMessage, tìm context từ news,
+        trả về câu trả lời + lịch sử.
+        """
+        session = self.get_object()
+        question = request.data.get("question")
+
+        if not question:
+            return Response({"error": "Missing question"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Lưu câu hỏi
+        ChatMessage.objects.create(session=session, role="user", content=question)
+
+        # Tìm context từ news
+        context_docs = search_news(question, top_k=3)
+        answer = context_docs[0] if context_docs else "Xin lỗi, hiện mình chưa tìm thấy thông tin phù hợp."
+
+        # Lưu câu trả lời
+        ChatMessage.objects.create(session=session, role="bot", content=answer)
+
+        # Log usage
+        AIUsageLog.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            type="chatbot",
+            input_data={"question": question},
+            output_data={"answer": answer, "sources": context_docs}
+        )
+
+        return Response({
+            "session_id": session.id,
+            "answer": answer,
+            "history": ChatMessageSerializer(session.messages.all(), many=True).data
+        })
+
+    @action(methods=["post"], detail=True, url_path="clear", permission_classes=[permissions.IsAuthenticated])
+    def clear(self, request, pk=None):
+        """
+        Xóa toàn bộ message trong session (reset hội thoại).
+        """
+        session = self.get_object()
+        session.messages.all().delete()
+        return Response({"status": "cleared", "session_id": session.id})
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def create_chat_session(request):
+    session = ChatSession.objects.create(
+        user=request.user if request.user.is_authenticated else None
+    )
+    return Response({"id": session.id})
+
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def send_message(request):
+    session_id = request.data.get("session_id")
+    message = request.data.get("message")
+
+    if not message:
+        return Response({"error": "Message is required"}, status=400)
+
+    # Nếu chưa có session thì tạo mới
+    if not session_id:
+        session = ChatSession.objects.create(
+            user=request.user if request.user.is_authenticated else None
+        )
+    else:
+        try:
+            session = ChatSession.objects.get(id=session_id)
+        except ChatSession.DoesNotExist:
+            return Response({"error": "Session not found"}, status=404)
+
+    # Lưu tin nhắn của user
+    ChatMessage.objects.create(session=session, role="user", content=message)
+
+    # 🔍 Tìm tin tức liên quan bằng RAG
+    retrieved_news = search_news(message)
+
+    # 🧠 Gọi model AI (ví dụ GPT-2)
+    nlp = pipeline("text-generation", model="gpt2")
+    bot_text = nlp(f"User asked: {message}. Relevant news: {retrieved_news}", max_length=100)[0]["generated_text"]
+
+    # Lưu tin nhắn bot
+    ChatMessage.objects.create(session=session, role="bot", content=bot_text)
+
+    # Log AI usage
+    AIUsageLog.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        type="chatbot",
+        input_data={"message": message},
+        output_data={"reply": bot_text}
+    )
+
+    # Trả về toàn bộ lịch sử chat
+    history = [
+        {"role": m.role, "content": m.content, "created_at": m.created_at}
+        for m in session.messages.all().order_by("created_at")
+    ]
+
+    return Response({"session_id": session.id, "history": history})
+
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def chat_history(request, session_id):
+    try:
+        session = ChatSession.objects.get(id=session_id)
+    except ChatSession.DoesNotExist:
+        return Response({"error": "Session not found"}, status=404)
+
+    history = [
+        {"role": m.role, "content": m.content, "created_at": m.created_at}
+        for m in session.messages.all().order_by("created_at")
+    ]
+
+    return Response({"session_id": session.id, "history": history})

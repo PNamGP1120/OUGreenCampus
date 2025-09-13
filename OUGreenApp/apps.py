@@ -7,3 +7,4 @@ class OugreenappConfig(AppConfig):
 
     def ready(self):
         import OUGreenApp.signals
+

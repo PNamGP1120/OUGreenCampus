@@ -1,6 +1,8 @@
 {% extends 'admin/base_site.html' %}
+{% load custom_filters %}
+
 {% block content %}
-<h1>🤖 AI Waste Classifier - Evaluation</h1>
+<h1>AI Waste Classifier - Evaluation</h1>
 
 <style>
     table {
@@ -19,53 +21,54 @@
     }
 </style>
 
-<h3>📊 Classification Report</h3>
+<h3>Classification Report</h3>
 <table>
     <thead>
-        <tr>
-            <th>Class</th>
-            <th>Precision</th>
-            <th>Recall</th>
-            <th>F1-score</th>
-            <th>Support</th>
-        </tr>
+    <tr>
+        <th>Class</th>
+        <th>Precision</th>
+        <th>Recall</th>
+        <th>F1-score</th>
+        <th>Support</th>
+    </tr>
     </thead>
     <tbody>
-        {% for label, metrics in ai_eval.report.items %}
-            {% if label != "accuracy" and label != "macro avg" and label != "weighted avg" %}
-            <tr>
-                <td>{{ label }}</td>
-                <td>{{ metrics.precision|floatformat:2 }}</td>
-                <td>{{ metrics.recall|floatformat:2 }}</td>
-                <td>{{ metrics|get_item:"f1-score"|floatformat:2 }}</td>
-                <td>{{ metrics.support }}</td>
-            </tr>
-            {% endif %}
-        {% endfor %}
+    {% for label, metrics in ai_eval.report.items %}
+    {% if label != "accuracy" and label != "macro avg" and label != "weighted avg" %}
+    <tr>
+        <td>{{ label }}</td>
+        <td>{{ metrics.precision|floatformat:2 }}</td>
+        <td>{{ metrics.recall|floatformat:2 }}</td>
+        <td>{{ metrics|get_item:"f1-score"|floatformat:2 }}</td>
+        <td>{{ metrics.support }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
     </tbody>
 </table>
 
 <p><b>Overall Accuracy:</b> {{ ai_eval.report.accuracy|floatformat:2 }}</p>
 
-<h3>📉 Confusion Matrix</h3>
+<h3>Confusion Matrix</h3>
 <table>
     <thead>
-        <tr>
-            <th></th>
-            {% for l in ai_eval.labels %}
-                <th>{{ l }}</th>
-            {% endfor %}
-        </tr>
+    <tr>
+        <th></th>
+        {% for l in ai_eval.labels %}
+        <th>{{ l }}</th>
+        {% endfor %}
+    </tr>
     </thead>
     <tbody>
-        {% for row,label in ai_eval.confusion_matrix|zip:ai_eval.labels %}
-        <tr>
-            <td><b>{{ label }}</b></td>
-            {% for val in row %}
-                <td>{{ val }}</td>
-            {% endfor %}
-        </tr>
+    {% for row,label in ai_eval.confusion_matrix|zip_lists:ai_eval.labels %}
+    <tr>
+        <td><b>{{ label }}</b></td>
+        {% for val in row %}
+        <td>{{ val }}</td>
         {% endfor %}
+    </tr>
+    {% endfor %}
     </tbody>
+
 </table>
 {% endblock %}

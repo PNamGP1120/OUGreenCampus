@@ -72,6 +72,11 @@ class Tag(TimeStampedModel):
 
 
 class News(TimeStampedModel):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+    ]
+
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="news")
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="news")
     title = models.CharField(max_length=200)
@@ -80,15 +85,16 @@ class News(TimeStampedModel):
 
     tags = models.ManyToManyField(Tag, related_name='news_items', blank=True)
 
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',  # 👈 mặc định là nháp
+        db_index=True
+    )
+
     class Meta:
         ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["title"]),
-            models.Index(fields=["created_at"]),
-        ]
 
-    def __str__(self):
-        return self.title
 
 
 class Document(TimeStampedModel):
@@ -98,6 +104,7 @@ class Document(TimeStampedModel):
     file = CloudinaryField('documents/')
 
     tags = models.ManyToManyField(Tag, related_name='documents', blank=True)
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="documents", null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -124,6 +131,7 @@ class ProjectContest(TimeStampedModel):
     )
     start_date = models.DateTimeField(blank=True, null=True)
     end_date = models.DateTimeField(blank=True, null=True)
+    image = CloudinaryField('ProjectContest/', blank=True, null=True)
 
     def __str__(self):
         return f"{self.title} ({self.get_status_display()})"
@@ -235,3 +243,16 @@ class NewsletterSubscriber(models.Model):
 
     def __str__(self):
         return self.email
+
+
+class ChatSession(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class ChatMessage(models.Model):
+    session = models.ForeignKey(ChatSession, related_name="messages", on_delete=models.CASCADE)
+    role = models.CharField(max_length=10, choices=[("user", "User"), ("bot", "Bot")])
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+

@@ -8,3 +8,8 @@ def get_item(dictionary, key):
     if isinstance(dictionary, dict):
         return dictionary.get(key)
     return None
+
+@register.filter
+def zip_lists(a, b):
+    """Zip hai danh sách để lặp song song trong template"""
+    return zip(a, b)

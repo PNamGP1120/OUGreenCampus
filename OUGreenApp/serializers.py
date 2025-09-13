@@ -2,7 +2,7 @@
 from rest_framework import serializers
 
 from OUGreenApp.models import User, Category, News, ProjectContest, Proposal, Document, Feedback, AIUsageLog, Comment, \
-    Like, NewsletterSubscriber
+    Like, NewsletterSubscriber, Tag, ChatMessage, ChatSession
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -29,20 +29,30 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'slug', 'description', 'created_at', 'updated_at')
         read_only_fields = ('slug',)
 
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ('id', 'name', 'slug', 'created_at', 'updated_at')
 
 class NewsSerializer(serializers.ModelSerializer):
-    category = serializers.SlugRelatedField(
-        slug_field='slug',
-        queryset=Category.objects.all()
+    category = CategorySerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source="category", write_only=True
+    )
+    tags = TagSerializer(many=True, read_only=True)
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Tag.objects.all(), source="tags", write_only=True
     )
     author = serializers.ReadOnlyField(source='author.username')
-    tags = serializers.StringRelatedField(many=True)
 
     class Meta:
         model = News
         fields = (
-            'id', 'title', 'content', 'image', 'category',
-            'tags', 'author', 'created_at', 'updated_at'
+            "id", "title", "content", "image",
+            "category", "category_id",
+            "tags", "tag_ids",
+            "status", "author",
+            "created_at", "updated_at"
         )
         read_only_fields = ('author', 'created_at', 'updated_at')
 
@@ -64,7 +74,7 @@ class ProjectContestSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectContest
         fields = (
-            'id', 'title', 'description', 'status',
+            'id', 'title', 'description', 'status', 'image',
             'start_date', 'end_date', 'created_at', 'updated_at'
         )
 
@@ -81,15 +91,36 @@ class ProposalSerializer(serializers.ModelSerializer):
         read_only_fields = ('user', 'created_at', 'updated_at')
 
 class DocumentSerializer(serializers.ModelSerializer):
-    user = serializers.ReadOnlyField(source='user.username')
+    category = CategorySerializer(read_only=True)
+    category_id = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), source="category", write_only=True, required=False
+    )
+    tags = TagSerializer(many=True, read_only=True)
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Tag.objects.all(), many=True, write_only=True, required=False, source="tags"
+    )
 
     class Meta:
         model = Document
-        fields = (
-            'id', 'title', 'description', 'file', 'user', 'tags',
-            'created_at', 'updated_at'
-        )
-        read_only_fields = ('user', 'created_at', 'updated_at')
+        fields = [
+            "id", "title", "description", "file",
+            "category", "category_id", "tags", "tag_ids",
+            "user", "created_at", "updated_at"
+        ]
+        read_only_fields = ("user", "created_at", "updated_at")
+
+
+    def create(self, validated_data):
+        tags = validated_data.pop("tags", [])
+        doc = Document.objects.create(**validated_data)
+        doc.tags.set(tags)
+        return doc
+
+    def update(self, instance, validated_data):
+        if "tags" in validated_data:
+            tags = validated_data.pop("tags")
+            instance.tags.set(tags)
+        return super().update(instance, validated_data)
 
     def to_representation(self, document):
         rep = super().to_representation(document)
@@ -145,3 +176,20 @@ class NewsletterSubscriberSerializer(serializers.ModelSerializer):
     class Meta:
         model = NewsletterSubscriber
         fields = ["id", "email", "created_at"]
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = ("id", "role", "content", "created_at")
+        read_only_fields = ("id", "created_at")
+
+
+class ChatSessionSerializer(serializers.ModelSerializer):
+    messages = ChatMessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ChatSession
+        fields = ("id", "user", "created_at", "messages")
+        read_only_fields = ("id", "created_at", "messages", "user")
+

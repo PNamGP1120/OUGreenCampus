@@ -18,7 +18,6 @@ import pymysql
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -29,7 +28,6 @@ SECRET_KEY = 'django-insecure-jl5ri&tiolf+mqbq)laqsgk*3-1v=@tyv89+b454vm&k3=_9j0
 DEBUG = True
 
 ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -42,9 +40,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'OUGreenApp',
     'rest_framework',
+    'django_crontab',
+    "corsheaders",
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -73,7 +74,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -83,14 +83,13 @@ DATABASES = {
         'NAME': 'ougreencampusdb',
         'USER': 'root',
         'PASSWORD': 'Phuongnam0212@',
-        'HOST': 'localhost',               
+        'HOST': 'localhost',
         'PORT': '3306',
         'OPTIONS': {},
     }
 }
 
 AUTH_USER_MODEL = "OUGreenApp.User"
-
 
 pymysql.install_as_MySQLdb()
 
@@ -101,7 +100,6 @@ cloudinary.config(
     secure=True
 )
 
-
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -109,8 +107,15 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ),
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+    ),
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -130,7 +135,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
@@ -142,7 +146,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
@@ -153,6 +156,20 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
 SENDGRID_API_KEY = "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"
 DEFAULT_FROM_EMAIL = "phuongnam.it0212@gmail.com"
+
+CRONJOBS = [
+    # chạy mỗi 6h sáng
+    ('0 6 * * *', 'django.core.management.call_command', ['crawl_news']),
+]
+
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+CORS_ALLOW_CREDENTIALS = True

@@ -36,9 +36,10 @@ class TagAdmin(admin.ModelAdmin):
 
 @admin.register(News)
 class NewsAdmin(admin.ModelAdmin):
-    list_display = ("title", "author", "category", "created_at")
-    list_filter = ("category", "created_at")
+    list_display = ("title", "category", "author", "status", "created_at")
+    list_filter = ("status", "category")
     search_fields = ("title", "content")
+
 
 
 @admin.register(Document)
